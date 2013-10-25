@@ -117,8 +117,8 @@ func fetchCrossword(user, pass string, t time.Time) ([]byte, error) {
 	return body, nil
 }
 
-func printCrossword(path string) error {
-	cmd := exec.Command("/usr/bin/lpr", "-P", "officejet", "-o", "fit-to-page", path)
+func printCrossword(path string, printer string) error {
+	cmd := exec.Command("/usr/bin/lpr", "-P", printer, "-o", "fit-to-page", path)
 	log.Println("Running ", cmd)
 	return cmd.Run()
 }
@@ -169,7 +169,7 @@ func main() {
 			continue
 		}
 
-		err = printCrossword(path)
+		err = printCrossword(path, "Brother")
 		if err != nil {
 			log.Printf("Printing failed: %v\n", err)
 			time.Sleep(time.Minute * 15)
