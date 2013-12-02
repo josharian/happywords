@@ -123,11 +123,34 @@ func printCrossword(path string, printer string) error {
 	return cmd.Run()
 }
 
+func process(user, pass, dir string, t time.Time) error {
+	pdf, err := fetchCrossword(user, pass, t)
+	if err != nil {
+		return fmt.Errorf("Fetch failed: %v\n", err)
+	}
+
+	xworddate := time.Now().Format("Jan0206")
+	path := filepath.Join(dir, xworddate+".pdf")
+	log.Printf("Saving PDF to %v (size %d)\n", path, len(pdf))
+	err = ioutil.WriteFile(path, pdf, 0644)
+	if err != nil {
+		return fmt.Errorf("Save to disk failed: %v\n", err)
+	}
+
+	err = printCrossword(path, "Brother")
+	if err != nil {
+		return fmt.Errorf("Printing failed: %v\n", err)
+	}
+
+	return nil
+}
+
 func main() {
 	user := flag.String("u", os.Getenv("NYT_USER"), "nyt username")
 	pass := flag.String("p", os.Getenv("NYT_PASS"), "nyt password")
 	dir := flag.String("d", os.Getenv("NYT_CROSSWORD_DIR"), "directory to save crosswords to; will not be created")
 	skip := flag.Bool("s", false, "skip today's crossword")
+	one := flag.String("o", "", "print this one date and exit, format YYYY.MM.DD")
 
 	flag.Parse()
 
@@ -135,6 +158,20 @@ func main() {
 		log.Printf("must provide a username and password, either on the command line or via NYT_[USER|PASS] envvars")
 		flag.Usage()
 		os.Exit(2)
+	}
+
+	if *one != "" {
+		date, err := time.Parse("2006.01.02", *one)
+		if err != nil {
+			log.Fatalf("Could not parse %s: %v", *one, err)
+		}
+		y, m, d := date.Date()
+		log.Printf("Processing %d.%d.%d\n", y, m, d)
+		err = process(*user, *pass, *dir, date)
+		if err != nil {
+			log.Fatalf("Failed: %v\n", err)
+		}
+		os.Exit(0)
 	}
 
 	lasty, lastm, lastd := 0, time.Month(0), 0
@@ -148,32 +185,14 @@ func main() {
 
 		if y == lasty && m == lastm && d == lastd {
 			time.Sleep(time.Hour * 1)
-			log.Printf("Already printed %d %d %d, sleeping...\n", lasty, lastm, lastd)
+			log.Printf("Already printed %d.%d.%d, sleeping...\n", lasty, lastm, lastd)
 			continue
 		}
 
-		pdf, err := fetchCrossword(*user, *pass, now)
+		err := process(*user, *pass, *dir, now)
 		if err != nil {
-			log.Printf("Fetch failed: %v\n", err)
+			log.Println("Error processing %d.%d.%d: %v", y, m, d, err)
 			time.Sleep(time.Minute * 15)
-			continue
-		}
-
-		xworddate := time.Now().Format("Jan0206")
-		path := filepath.Join(*dir, xworddate+".pdf")
-		log.Printf("Saving PDF to %v (size %d)\n", path, len(pdf))
-		err = ioutil.WriteFile(path, pdf, 0644)
-		if err != nil {
-			log.Printf("Save to disk failed: %v\n", err)
-			time.Sleep(time.Minute * 15)
-			continue
-		}
-
-		err = printCrossword(path, "Brother")
-		if err != nil {
-			log.Printf("Printing failed: %v\n", err)
-			time.Sleep(time.Minute * 15)
-			continue
 		}
 
 		lasty, lastm, lastd = y, m, d
