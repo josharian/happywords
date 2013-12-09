@@ -193,6 +193,7 @@ func main() {
 		if err != nil {
 			log.Println("Error processing %d.%d.%d: %v", y, m, d, err)
 			time.Sleep(time.Minute * 15)
+			continue
 		}
 
 		lasty, lastm, lastd = y, m, d
