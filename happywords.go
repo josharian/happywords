@@ -93,9 +93,8 @@ func fetchCrossword(user, pass string, t time.Time) ([]byte, error) {
 
 	// Fetch the crossword
 	xworddate := t.Format("Jan0206")
-	y, m, d := t.Date()
-	log.Printf("Fetching %s.PDF\n", xworddate)
-	resp, err = client.Get(fmt.Sprintf("https://select.nytimes.com/premium/xword/%04d/%02d/%02d/%s.pdf", y, m, d, xworddate))
+	log.Printf("Fetching %s.pdf\n", xworddate)
+	resp, err = client.Get(fmt.Sprintf("https://www.nytimes.com/svc/crosswords/v2/puzzle/print/%s.pdf", xworddate))
 	if err != nil {
 		return nil, err
 	}
