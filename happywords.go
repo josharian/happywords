@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -131,26 +132,43 @@ func process(user, pass, dir string, t time.Time) error {
 	xworddate := time.Now().Format("Jan0206")
 	path := filepath.Join(dir, xworddate+".pdf")
 	log.Printf("Saving PDF to %v (size %d)\n", path, len(pdf))
-	err = ioutil.WriteFile(path, pdf, 0644)
-	if err != nil {
+	if err := ioutil.WriteFile(path, pdf, 0644); err != nil {
 		return fmt.Errorf("Save to disk failed: %v\n", err)
 	}
 
-	err = printCrossword(path, "Brother")
-	if err != nil {
+	if *fetchOnly {
+		return nil
+	}
+	if err := printCrossword(path, "Brother"); err != nil {
 		return fmt.Errorf("Printing failed: %v\n", err)
 	}
 
 	return nil
 }
 
-func main() {
-	user := flag.String("u", os.Getenv("NYT_USER"), "nyt username")
-	pass := flag.String("p", os.Getenv("NYT_PASS"), "nyt password")
-	dir := flag.String("d", os.Getenv("NYT_CROSSWORD_DIR"), "directory to save crosswords to; will not be created")
-	skip := flag.Bool("s", false, "skip today's crossword")
-	one := flag.String("o", "", "print this one date and exit, format YYYY.MM.DD")
+// parseDate parses a YYYY.MM.DD date provided
+// on the command line. If s is not parseable,
+// parseDate logs an error and calls os.Exit(2).
+func parseDate(s string) time.Time {
+	date, err := time.Parse("2006.01.02", s)
+	if err != nil {
+		log.Fatalf("Could not parse %s: %v", s, err)
+		os.Exit(2)
+	}
+	return date
+}
 
+var (
+	user      = flag.String("u", os.Getenv("NYT_USER"), "nyt username")
+	pass      = flag.String("p", os.Getenv("NYT_PASS"), "nyt password")
+	dir       = flag.String("d", os.Getenv("NYT_CROSSWORD_DIR"), "directory to save crosswords to; will not be created")
+	skip      = flag.Bool("s", false, "skip today's crossword")
+	one       = flag.String("o", "", "print this one date and exit, format YYYY.MM.DD")
+	dateRange = flag.String("r", "", "print this range of dates (inclusive) and exit, format YYYY.MM.DD:YYYY.MM.DD")
+	fetchOnly = flag.Bool("f", false, "fetch the crossword but do not print it")
+)
+
+func main() {
 	flag.Parse()
 
 	if *user == "" || *pass == "" {
@@ -160,15 +178,37 @@ func main() {
 	}
 
 	if *one != "" {
-		date, err := time.Parse("2006.01.02", *one)
-		if err != nil {
-			log.Fatalf("Could not parse %s: %v", *one, err)
-		}
+		date := parseDate(*one)
 		y, m, d := date.Date()
 		log.Printf("Processing %d.%d.%d\n", y, m, d)
-		err = process(*user, *pass, *dir, date)
-		if err != nil {
+		if err := process(*user, *pass, *dir, date); err != nil {
 			log.Fatalf("Failed: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if *dateRange != "" {
+		dates := strings.SplitN(*dateRange, ":", 2)
+		if len(dates) != 2 {
+			log.Println("date range must be of the form YYYY.MM.DD:YYYY.MM.DD")
+			os.Exit(2)
+		}
+		from, to := parseDate(dates[0]), parseDate(dates[1])
+		if to.Before(from) {
+			from, to = to, from
+		}
+		fromy, fromm, fromd := from.Date()
+		toy, tom, tod := to.Date()
+		log.Println("printing date range", fromy, fromm, fromd, "to", toy, tom, tod)
+		for from.Before(to) || from.Equal(to) {
+			y, m, d := from.Date()
+			log.Printf("Processing %d.%d.%d\n", y, m, d)
+			if err := process(*user, *pass, *dir, from); err != nil {
+				log.Fatalf("Failed: %v\n", err)
+				os.Exit(1)
+			}
+			from = from.Add(time.Hour * 24)
 		}
 		os.Exit(0)
 	}
